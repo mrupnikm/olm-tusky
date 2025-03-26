@@ -23,7 +23,7 @@ jobs:
     - name: Build Docker image
       run: |
         TAG=${GITHUB_REF#refs/tags/}
-        cd docker
+        cd tusky-job
         docker build --tag ${{ secrets.DOCKER_USERNAME }}//olm-tusky-job:${TAG} .
 
     - name: Push Docker image to Docker Hub
