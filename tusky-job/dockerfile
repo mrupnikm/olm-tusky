@@ -1,0 +1,32 @@
+FROM ubuntu:22.04
+
+# Set noninteractive mode for apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Add PostgreSQL repository to get the latest version
+RUN apt-get update && \
+    apt-get install -y curl ca-certificates gnupg && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt/ jammy-pgdg main" > /etc/apt/sources.list.d/postgresql.list
+
+# Install required packages with PostgreSQL 17 client
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    postgresql-client-17 \
+    curl \
+    gzip \
+    ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install MinIO client
+RUN curl -O https://dl.min.io/client/mc/release/linux-amd64/mc && \
+    chmod +x mc && \
+    mv mc /usr/local/bin/
+
+# Add backup script
+COPY backup.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/backup.sh
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/backup.sh"]

@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "tusky-db-backup.fullname" . }}
+  namespace: {{ .Values.namespace }} 
+  labels:
+    {{- include "tusky-db-backup.labels" . | nindent 4 }}
+  annotations:
+    backup.timestamp: "2025-03-13 11:45:14"
+    backup.user: "mrupnikm"
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit | default 1 }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds | default 600 }}
+      template:
+        spec:
+          serviceAccountName: {{ include "tusky-db-backup.fullname" . }}
+          initContainers:
+          - name: scale-down
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Scaling down deployment {{ .Release.Name }}-{{ .Values.scaleTarget.deploymentName }}..."
+              
+              # Store current replicas count
+              CURRENT_REPLICAS=$(kubectl get deployment {{ .Release.Name }}-{{ .Values.scaleTarget.deploymentName }} \
+                -n {{ .Values.namespace }} -o jsonpath='{.spec.replicas}')
+              
+              # Scale down
+              kubectl scale deployment {{ .Release.Name }}-{{ .Values.scaleTarget.deploymentName }} \
+                --replicas=0 \
+                -n {{ .Values.namespace }}
+              
+              # Wait for scale down
+              echo "Waiting for pods to terminate..."
+              kubectl wait --for=delete pod \
+                -l app.kubernetes.io/name={{ .Release.Name }}-{{ .Values.scaleTarget.deploymentName }} \
+                -n {{ .Values.namespace }} --timeout=60s
+              
+              echo "Scale down completed. Original replicas: $CURRENT_REPLICAS"
+          containers:
+          - name: backup
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            env:
+            - name: PG_HOST
+              value: "{{ .Release.Name }}-postgresql"
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DATABASE
+              value: {{ .Values.postgresql.database | quote }}
+            - name: PG_USER
+              value: {{ .Values.postgresql.user | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: postgresql-password
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.bucket.minioEndpoint | quote }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3bucket-secret 
+                  key: accesskey
+            - name: MINIO_BUCKET
+              value: {{ .Values.bucket.minioBucket | quote }}
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3bucket-secret 
+                  key: secretkey
+            resources:
+              {{- toYaml .Values.resources | nindent 14 }}
+          - name: scale-up
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for backup to complete..."
+              while [ "$(kubectl get pod $HOSTNAME -n {{ .Values.namespace }} -o jsonpath='{.status.containerStatuses[?(@.name=="backup")].state.terminated}')" = "" ]; do
+                sleep 5
+              done
+              
+              echo "Scaling up deployment..."
+              kubectl scale deployment {{ .Release.Name }}-{{ .Values.scaleTarget.deploymentName }} \
+                --replicas={{ .Values.scaleTarget.restoreReplicas | default 1 }} \
+                -n {{ .Values.namespace }}
+              
+              echo "Scale up completed"
+            env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          restartPolicy: OnFailure

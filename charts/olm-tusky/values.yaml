@@ -1,0 +1,38 @@
+image:
+  repository: docker.io/something 
+  tag: latest
+  pullPolicy: Always
+
+# Schedule (default: every day at 1 AM UTC)
+schedule: "0 1 * * *"
+
+# Existing secret containing credentials
+existingSecret: "postgresql-specific"
+
+# Values from your environment
+values:
+  minioEndpoint: 
+  minioBucket: 
+  minioAccessKey: 
+  minioSecretKey:
+
+# Scaling configuration
+scaleTarget:
+  deploymentName: "deployment"
+  restoreReplicas: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 1
+activeDeadlineSeconds: 600
+postgresql:
+  database:
+  user:
+
