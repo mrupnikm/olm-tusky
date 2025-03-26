@@ -1,5 +1,5 @@
 image:
-  repository: docker.io/something 
+  repository: mrupnikm/olm-tusky-job 
   tag: latest
   pullPolicy: Always
 

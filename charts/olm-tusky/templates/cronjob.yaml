@@ -6,7 +6,6 @@ metadata:
   labels:
     {{- include "tusky-db-backup.labels" . | nindent 4 }}
   annotations:
-    backup.timestamp: "2025-03-13 11:45:14"
     backup.user: "mrupnikm"
 spec:
   schedule: {{ .Values.schedule | quote }}
